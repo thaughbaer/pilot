@@ -9,16 +9,20 @@ I use "runit" to autostart on reboot. The runit config file is in the sv subdire
 
 My process listing post reboot looks something ( exactly ) like this..
 
+```
 pi@raspberrypi:~/pilot $ ps -eaf | grep gunicorn
 pi         219   216  2 17:09 ?        00:00:09 /usr/bin/python3 /usr/bin/gunicorn3 -c /home/pi/pilot/gunicorn.conf.py --pid=/var/run/pilot/pilot.pid wsgi:app
 pi         604   219  1 17:09 ?        00:00:06 /usr/bin/python3 /usr/bin/gunicorn3 -c /home/pi/pilot/gunicorn.conf.py --pid=/var/run/pilot/pilot.pid wsgi:app
 pi         605   219  1 17:09 ?        00:00:06 /usr/bin/python3 /usr/bin/gunicorn3 -c /home/pi/pilot/gunicorn.conf.py --pid=/var/run/pilot/pilot.pid wsgi:app
 pi         606   219  1 17:09 ?        00:00:06 /usr/bin/python3 /usr/bin/gunicorn3 -c /home/pi/pilot/gunicorn.conf.py --pid=/var/run/pilot/pilot.pid wsgi:app
 pi         690   638  0 17:16 pts/0    00:00:00 grep --color=auto gunicorn
+```
 
 You need a config file in the pilot subdirectory named config.json.
 
 This is my config file.
+
+```
 {
     "hosts": [
         {
@@ -27,6 +31,7 @@ This is my config file.
         }
     ]
 }
+```
 
 You don't have to add your hostnames into the Alexa app. The pilot does some speech recognition.
 
