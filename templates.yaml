@@ -1,0 +1,10 @@
+welcome_aboard: This is your pilot speaking. Welcome aboard.
+
+bon_voyage: We hope you enjoyed your flight today. Bon voyage.
+
+safety_briefing: Please remain in your seat with your seatbelt fastened.
+
+unknown_hostname : Passenger {{ hostname }} is not on the manifest.
+
+ok: Roger.
+fail: Mayday.
