@@ -44,3 +44,7 @@ At this point.. I don't really recall how I setup the Alexa app :-) as it was ov
 You'll need access to the Alexa Developer Console.
 
 There should be enough screenshots in the Pilot doc for you to mirror the setup.
+
+You need to be running an https server.
+
+I'm using dynu for dynamic DNS, LetsEncrypt for an SSL certificate, and nginx. My anonymised nginx config file is in the nginx sibdirectory.
