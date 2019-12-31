@@ -1,0 +1,17 @@
+#!/bin/sh
+
+GUNICORN=/usr/bin/gunicorn3
+ROOT=/home/pi/pilot
+USER=pi
+RUN=/var/run/pilot
+PID=$RUN/pilot.pid
+
+APP=wsgi:app
+
+mkdir -p $RUN
+chown $USER $RUN
+
+if [ -f $PID ]; then rm $PID; fi
+
+cd $ROOT
+exec chpst -u $USER $GUNICORN -c $ROOT/gunicorn.conf.py --pid=$PID $APP
