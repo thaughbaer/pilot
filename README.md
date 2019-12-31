@@ -37,8 +37,10 @@ You don't have to add your hostnames into the Alexa app. The pilot does some spe
 
 I can say...
 
+```
 "Alexa, ask pilot to wakeup kael"
 "Alexa, ask pilot to suspend kael"
+```
 
 For suspend you need to setup remote ssh to the target computer ( mine is running Ubuntu 18.04 ).
 
