@@ -24,6 +24,7 @@ This is my config file.
 
 ```
 {
+    "applicationId": "amzn1.ask.skill.uuid",
     "hosts": [
         {
             "hostname": "kael",

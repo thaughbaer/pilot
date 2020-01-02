@@ -5,7 +5,7 @@ import pwd
 
 from flask import Flask, render_template
 
-from flask_ask import Ask, statement, question, session
+from flask_ask import Ask, statement, question, session, context
 
 import json
 
@@ -15,10 +15,6 @@ from wakeonlan import send_magic_packet
 
 import fuzzy
 
-app = Flask(__name__)
-
-ask = Ask(app, "/")
-
 logger = logging.getLogger("flask_ask")
 logger.setLevel(logging.DEBUG)
 
@@ -26,6 +22,12 @@ passwd = pwd.getpwuid(os.getuid())
 
 with open('config.json', 'r') as config_file:
         config = json.load(config_file)
+
+app = Flask(__name__)
+
+ask = Ask(app, "/")
+
+app.config['ASK_APPLICATION_ID'] = config['applicationId']
 
 dmeta = fuzzy.DMetaphone()
 
@@ -36,7 +38,6 @@ def match_host(hostname):
 
 
 @ask.launch
-
 def launch():
 
     return_msg = render_template('welcome_aboard')
@@ -45,7 +46,6 @@ def launch():
 
 
 @ask.intent('AMAZON.FallbackIntent')
-
 def fallback():
     return_msg = render_template('safety_briefing')
 
@@ -53,7 +53,6 @@ def fallback():
 
 
 @ask.intent('AMAZON.HelpIntent')
-
 def help():
     return_msg = render_template('safety_briefing')
 
@@ -61,7 +60,6 @@ def help():
 
 
 @ask.intent('AMAZON.StopIntent')
-
 def stop():
     return_msg = render_template('bon_voyage')
 
@@ -69,7 +67,6 @@ def stop():
 
 
 @ask.intent('AMAZON.CancelIntent')
-
 def cancel():
     return_msg = render_template('bon_voyage')
 
@@ -77,13 +74,11 @@ def cancel():
 
 
 @ask.session_ended
-
 def session_ended():
     return "{}", 200
 
 
 @ask.intent("SuspendIntent", convert = {'hostname': str})
-
 def suspend(hostname):
 
     host = match_host(hostname)
@@ -94,14 +89,20 @@ def suspend(hostname):
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
             key = paramiko.RSAKey.from_private_key_file(passwd.pw_dir + '/.ssh/id_rsa')
+
             client.connect(host['hostname'], username = passwd.pw_name, pkey = key)
 
             command = "sudo systemctl suspend"
             stdin, stdout, stderr = client.exec_command(command)
             print(stdout.read())
-            return_msg = render_template('ok')
+
+        except paramiko.ssh_exception.NoValidConnectionsError:
+            pass
+
         finally:
             client.close()
+
+        return_msg = render_template('ok')
 
     else:
         return_msg = render_template('unknown_hostname', hostname = hostname)
