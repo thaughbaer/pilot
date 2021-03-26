@@ -4,30 +4,37 @@ import os
 import pwd
 
 from flask import Flask, render_template
-
-from flask_ask import Ask, statement, question, session, context
+from ask_sdk_core.skill_builder import SkillBuilder
+from flask_ask_sdk.skill_adapter import SkillAdapter
+from ask_sdk_core.utils import is_request_type, is_intent_name
+from ask_sdk_core.handler_input import HandlerInput
+from ask_sdk_model.ui import SimpleCard
+from ask_sdk_model import Response
 
 import json
 
-import paramiko
-
 from wakeonlan import send_magic_packet
+import paramiko
+import socket
 
 import fuzzy
 
-logger = logging.getLogger("flask_ask")
-logger.setLevel(logging.DEBUG)
+
+app = Flask(__name__)
+
+if __name__ != '__main__':
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
 
 passwd = pwd.getpwuid(os.getuid())
 
 with open('config.json', 'r') as config_file:
         config = json.load(config_file)
 
-app = Flask(__name__)
+skill_builder = SkillBuilder()
 
-ask = Ask(app, "/")
-
-app.config['ASK_APPLICATION_ID'] = config['applicationId']
+#app.config['ASK_APPLICATION_ID'] = config['applicationId']
 
 dmeta = fuzzy.DMetaphone()
 
@@ -37,49 +44,48 @@ def match_host(hostname):
     return next((host for host in config['hosts'] if set(list(filter(None.__ne__, dmeta(host['hostname'])))).intersection(list(filter(None.__ne__, dmeta(hostname))))), None)
 
 
-@ask.launch
-def launch():
+@skill_builder.request_handler(can_handle_func=is_request_type('LaunchRequest'))
+def launch_request_handler(handler_input):
+    speech_text = 'This is your pilot speaking. Welcome aboard.'
 
-    return_msg = render_template('welcome_aboard')
-
-    return question(return_msg)
-
-
-@ask.intent('AMAZON.FallbackIntent')
-def fallback():
-    return_msg = render_template('safety_briefing')
-
-    return question(return_msg)
+    return handler_input.response_builder.speak(speech_text).response
 
 
-@ask.intent('AMAZON.HelpIntent')
-def help():
-    return_msg = render_template('safety_briefing')
+@skill_builder.request_handler(can_handle_func=is_intent_name('AMAZON.HelpIntent'))
+def help_intent_handler(handler_input):
+    speech_text = 'Press the call button if you require a flight attendant.'
 
-    return question(return_msg)
+    return handler_input.response_builder.speak(speech_text).ask(speech_text).response
 
+@skill_builder.request_handler(can_handle_func=lambda handler_input: is_intent_name('AMAZON.CancelIntent')(handler_input) or is_intent_name('AMAZON.StopIntent')(handler_input))
+def cancel_and_stop_intent_handler(handler_input):
+    speech_text = 'We hope you enjoyed your flight today. Bon voyage.'
 
-@ask.intent('AMAZON.StopIntent')
-def stop():
-    return_msg = render_template('bon_voyage')
-
-    return question(return_msg)
-
-
-@ask.intent('AMAZON.CancelIntent')
-def cancel():
-    return_msg = render_template('bon_voyage')
-
-    return question(return_msg)
+    return handler_input.response_builder.speak(speech_text).set_should_end_session(True).response
 
 
-@ask.session_ended
-def session_ended():
-    return "{}", 200
+@skill_builder.request_handler(can_handle_func=is_intent_name('AMAZON.FallbackIntent'))
+def fallback_handler(handler_input):
+    speech_text = 'Please remain in your seat with your seatbelt fastened.'
+
+    return handler_input.response_builder.speak(speech_text).ask(speech_text).response
 
 
-@ask.intent("SuspendIntent", convert = {'hostname': str})
-def suspend(hostname):
+@skill_builder.exception_handler(can_handle_func=lambda i, e: True)
+def all_exception_handler(handler_input, exception):
+    app.logger.error(exception, exc_info=True)
+
+    speech_text = 'Mayday mayday.'
+
+    handler_input.response_builder.speak(speech_text)
+
+    return handler_input.response_builder.response
+
+
+@skill_builder.request_handler(can_handle_func=is_intent_name('SuspendIntent'))
+def suspend_handler(handler_input):
+    request = handler_input.request_envelope.request
+    hostname = request.intent.slots['hostname'].value
 
     host = match_host(hostname)
     if host is not None:
@@ -90,38 +96,64 @@ def suspend(hostname):
 
             key = paramiko.RSAKey.from_private_key_file(passwd.pw_dir + '/.ssh/id_rsa')
 
+       	    app.logger.info('Shutdown {}'.format(host['hostname']))
             client.connect(host['hostname'], username = passwd.pw_name, pkey = key)
 
-            command = "sudo systemctl suspend"
+            command = 'sudo systemctl suspend'
             stdin, stdout, stderr = client.exec_command(command)
-            print(stdout.read())
+            app.logger.debug('Command output: {} {}'.format(stdout.read(), stderr.read()))
+
+            speech_text = 'ok'
 
         except paramiko.ssh_exception.NoValidConnectionsError:
-            pass
+            speech_text = 'ok'
 
         finally:
             client.close()
-
-        return_msg = render_template('ok')
-
     else:
-        return_msg = render_template('unknown_hostname', hostname = hostname)
+        speech_text = 'Passenger {} is not on the manifest.'.format(hostname)
 
-    return statement(return_msg)
+    return handler_input.response_builder.speak(speech_text).response
 
 
-@ask.intent("WakeUpIntent", convert = {'hostname': str})
-def wake_up(hostname):
+@skill_builder.request_handler(can_handle_func=is_intent_name('WakeUpIntent'))
+def wakeup_handler(handler_input):
+    request = handler_input.request_envelope.request
+    hostname = request.intent.slots['hostname'].value
 
     host = match_host(hostname)
     if host is not None:
-        send_magic_packet(host['hardwareAddress'], ip_address = host['hostname'])
-        logger.debug("Send magic packet to {}".format(host['hardwareAddress']))
-        return_msg = render_template('ok')
-    else:
-        return_msg = render_template('unknown_hostname', hostname = hostname)
+        try:
+            send_magic_packet(host['hardwareAddress'], ip_address = host['hostname'])
+       	    app.logger.info('Send magic packet to {}'.format(host['hardwareAddress']))
 
-    return statement(return_msg)
+       	    speech_text = 'ok'
+        except socket.gaierror:
+       	    speech_text = 'fail'
+    else:
+        speech_text = 'Passenger {} is not on the manifest.'.format(hostname)
+
+    return handler_input.response_builder.speak(speech_text).response
+
+
+@skill_builder.request_handler(can_handle_func=is_request_type('SessionEndedRequest'))
+def session_ended_request_handler(handler_input):
+    return handler_input.response_builder.response
+
+
+@skill_builder.global_request_interceptor()
+def request_logger(handler_input):
+    app.logger.debug('Request received: {}'.format(handler_input.request_envelope.request))
+
+
+@skill_builder.global_response_interceptor()
+def response_logger(handler_input, response):
+    app.logger.debug('Response generated: {}'.format(response))
+
+
+skill_response = SkillAdapter(skill=skill_builder.create(), skill_id=config['applicationId'], app=app)
+
+skill_response.register(app=app, route='/')
 
 
 if __name__ == '__main__':
